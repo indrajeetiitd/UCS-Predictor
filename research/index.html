@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rock UCS | Research Dashboard</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#193733;background:#f0f5f3}
+*{box-sizing:border-box}body{margin:0}header{background:linear-gradient(120deg,#133c36,#206d60);padding:36px max(24px,calc((100vw - 1170px)/2));color:white}
+header small{text-transform:uppercase;letter-spacing:2px;opacity:.75}h1{font-size:clamp(28px,4vw,43px);margin:7px 0}header p{opacity:.82;max-width:680px;line-height:1.6}
+a{color:#137561}header a{color:#d8fff3}
+main{max-width:1170px;margin:auto;padding:25px 20px 50px}nav{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:22px}
+button,select{font:inherit;padding:10px 15px;background:white;border:1px solid #cbd9d5;border-radius:8px;color:#193733}
+button{cursor:pointer}button.on{background:#17695b;border-color:#17695b;color:white}
+section,.tile{background:white;border:1px solid #d9e5e1;border-radius:12px;padding:22px;margin-bottom:20px}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.tile{margin:0}.tile b{display:block;font-size:32px;margin-top:6px}
+h2{font-size:21px;margin:0 0 16px}h3{font-size:17px;margin:0 0 12px}
+.controls{display:flex;flex-wrap:wrap;gap:15px;align-items:end;margin:0 0 20px}
+label{display:flex;flex-direction:column;gap:6px;font-weight:600}select{min-width:160px}
+.row{display:grid;grid-template-columns:minmax(110px,160px) 1fr 75px;gap:12px;align-items:center;margin:14px 0}
+.track{height:14px;background:#e3eeea;border-radius:10px;overflow:hidden}.fill{height:100%;background:#1c9179;border-radius:10px}
+.muted{color:#627b75;font-size:14px}.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;white-space:nowrap}
+th,td{padding:11px 13px;text-align:left;border-bottom:1px solid #e2ece8}th{background:#edf5f1;font-size:13px}
+mark{background:#e0f5ed;padding:2px 6px;border-radius:4px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.chartCard{border:1px solid #e0e8e5;padding:15px;border-radius:10px}
+footer{max-width:1170px;margin:0 auto;padding:0 20px 30px;color:#68817b;font-size:13px}
+@media(max-width:650px){.tiles{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.row{grid-template-columns:95px 1fr 55px}section{padding:16px}}
+</style></head><body>
+<header><small>Geotechnical research · Uniaxial compressive strength</small>
+<h1>Rock UCS Research Dashboard</h1><p>Explore lithology-specific machine learning benchmarks, test performance, uncertainty and comparisons with the Liu et al. baseline.</p>
+<a href="../">← Open live UCS Predictor</a></header>
+<main><nav id="tabs"></nav><div class="controls"><label>Rock category<select id="cat"></select></label><label>Performance metric<select id="metric"><option value="R2">R²</option><option value="RMSE">RMSE</option><option value="MAE">MAE</option><option value="VAF">VAF</option><option value="A20">A20</option></select></label></div><div id="view">Loading research data…</div></main>
+<footer>Source: repository model metadata. Metrics are from the supplied fixed train/test split (seed 42); these are research estimates, not certified engineering design values.</footer>
+<script>
+let meta=null,tab='Overview';const tabs=['Overview','Model comparison','Training vs testing','Uncertainty'];
+const $=x=>document.getElementById(x),num=x=>Number(x).toFixed(3);
+function tbl(headers,rows){return '<div class="scroll"><table><thead><tr>'+headers.map(v=>'<th>'+v+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(v=>'<td>'+v+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}
+function render(){
+const c=$('cat').value,m=$('metric').value,cat=meta.categories[c],mods=Object.entries(cat.models),best=mods.reduce((a,b)=>b[1].test.R2>a[1].test.R2?b:a);
+$('tabs').innerHTML=tabs.map(t=>'<button class="'+(t===tab?'on':'')+'" data-tab="'+t+'">'+t+'</button>').join('');
+$('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
+const barset=(mode)=>{const vals=mods.map(x=>x[1][mode][m]);const max=Math.max(...vals,1e-9);return mods.map(([name,obj])=>'<div class="row"><span>'+name+'</span><div class="track"><div class="fill" style="width:'+Math.max(0,obj[mode][m]/max*100)+'%"></div></div><strong>'+num(obj[mode][m])+'</strong></div>').join('')};
+const cols=['Model','Train R²','Test R²','Train RMSE','Test RMSE','Test MAE','Test VAF','Test A20'];
+const full=tbl(cols,mods.map(([n,x])=>[n,num(x.train.R2),num(x.test.R2),num(x.train.RMSE),num(x.test.RMSE),num(x.test.MAE),num(x.test.VAF),num(x.test.A20)]));
+const baseline=cat.paper;
+if(tab==='Overview'){
+const total=Object.values(meta.categories).reduce((s,c)=>s+c.n_total,0);
+$('view').innerHTML='<div class="tiles">'+[['Total records',total],['Categories',Object.keys(meta.categories).length],['Trained models',Object.keys(meta.categories).length*meta.models.length],['Test observations',Object.values(meta.categories).reduce((s,x)=>s+x.n_test,0)]].map(([k,v])=>'<div class="tile">'+k+'<b>'+v+'</b></div>').join('')+'</div><section style="margin-top:18px"><h2>'+c+' model performance</h2><p>Best held-out test R²: <mark>'+best[0]+' · '+num(best[1].test.R2)+'</mark></p><h3>Test '+m+'</h3>'+barset('test')+'<p class="muted">'+(m==='RMSE'||m==='MAE'?'Lower values are better.':'Higher values are better.')+'</p></section><section><h2>Data ranges</h2>'+tbl(['Variable','Minimum','Median','Maximum'],Object.entries(cat.ranges).map(([k,v])=>[k,...v.map(num)]))+'</section>';
+}else if(tab==='Model comparison'){$('view').innerHTML='<section><h2>Held-out test '+m+'</h2>'+barset('test')+'</section><section><h2>All model metrics</h2>'+full+'</section><section><h2>Liu et al. published reference</h2>'+tbl(['Reference','Test R²','Test RMSE','Test MAE','Test VAF','Test A20'],[['RF–LR',...['Test_R2','Test_RMSE','Test_MAE','Test_VAF','Test_A20'].map(k=>baseline[k]===undefined?'—':num(baseline[k]))]])+'<p class="muted">Benchmark and literature results are shown as supplied; comparisons are descriptive and do not imply statistical significance.</p></section>'}
+else if(tab==='Training vs testing'){$('view').innerHTML='<section><h2>Training '+m+'</h2>'+barset('train')+'</section><section><h2>Testing '+m+'</h2>'+barset('test')+'</section><section><h2>Generalization comparison</h2>'+full+'</section>'}
+else {$('view').innerHTML='<section><h2>Approximate residual uncertainty</h2><p class="muted">Bands below use ±1.96 × reported standard error (SE). They are illustrative residual-error bands, not calibrated individual prediction intervals.</p>'+tbl(['Model','Residual SE (MPa)','±1.96 SE (MPa)'],mods.map(([n,x])=>[n,num(x.se),num(1.96*x.se)]))+'</section><section><h2>Dataset notes</h2><p>Training and testing counts are taken verbatim from metadata.</p>'+tbl(['Category','Reported total','Train','Test'],Object.entries(meta.categories).map(([k,v])=>[k,v.n_total,v.n_train,v.n_test]))+'<p class="muted">The Metamorphic dataset reports 92 total versus 71 training plus 20 testing records. This discrepancy is preserved.</p></section>'}
+}
+Promise.all([fetch('../meta.json').then(r=>{if(!r.ok)throw Error('Metadata unavailable');return r.json()})]).then(([m])=>{meta=m;$('cat').innerHTML=Object.keys(m.categories).map(c=>'<option>'+c+'</option>').join('');$('cat').onchange=render;$('metric').onchange=render;render()}).catch(e=>$('view').textContent='Could not load model metadata: '+e.message);
+</script></body></html>
